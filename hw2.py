@@ -44,7 +44,6 @@ def barber(barberID, haircut_t):
 
         #check to see if its the "end of the day" before continuing to work
         if (clientsTally >= input.num_clients):
-            print "Barber " + str(barberID) + " exiting"
             return
 
         #cut hair
@@ -52,8 +51,7 @@ def barber(barberID, haircut_t):
         time.sleep( random.randint(0, haircut_t) )
         #barber done, let the system know is available
         clientsTally += 1
-        print "Barber " + str(barberID) + " done || Tally = " + str(clientsTally)
-        #barbersSem.release()
+        print "Barber " + str(barberID) + " done"
 
 #thread functions for clients
 def client(clientID):
@@ -67,7 +65,7 @@ def client(clientID):
         #if a chair is not available, then leave
         if not chairAvailable:
             clientsTally += 1
-            print "Client " + str(clientID) + " leaving || Tally = " + str(clientsTally)
+            print "Client " + str(clientID) + " leaving"
             return
         #a is available, wait until a barber is done and then wake barber up and release chair
         else:
