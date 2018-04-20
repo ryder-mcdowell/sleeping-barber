@@ -26,7 +26,7 @@ def input_arg_handler():
 
 #outputs statistics
 def output_stats(input, totalBarberWaitTime, totalClientWaitTime, totalHaircuts, totalClientsWhoLeft):
-    print "\n\nTOTALS:"
+    print "\nTOTALS:"
     print "Total Haircuts: " + str(totalHaircuts)
     print "Clients That Left: " + str(totalClientsWhoLeft)
     print "Avg Client Wait Time: " + str((totalClientWaitTime / input.num_clients) * 1000000)
@@ -39,7 +39,6 @@ def barber(barberID):
     #loop until day is over
     while (clientsTally < input.num_clients):
         #wait until a client wakes barber up
-        print "Barber " + str(barberID) + " waiting"
         barbersSem.release()
         condition.acquire()
         startTime = time.time()
@@ -53,11 +52,9 @@ def barber(barberID):
             return
 
         #cut hair
-        print "Barber " + str(barberID) + " cutting"
         time.sleep( random.randint(0, input.haircut_t) )
 
         #barber done, let the system know is available
-        print "Barber " + str(barberID) + " done"
         clientsTally += 1
         totalHaircuts += 1
 
@@ -65,7 +62,6 @@ def barber(barberID):
 def client(clientID):
     global clientsTally, barbersSem, chairsSem, condition, totalClientWaitTime, totalClientsWhoLeft
 
-    print "Client " + str(clientID) + " entering"
     barberAvailable = barbersSem.acquire(False)
     #if a barber is not a available, then check if a chair is available
     if not barberAvailable:
@@ -73,24 +69,20 @@ def client(clientID):
         #if a chair is not available, then leave
         if not chairAvailable:
             clientsTally += 1
-            print "Client " + str(clientID) + " leaving"
             totalClientsWhoLeft += 1
             return
         #a is available, wait until a barber is done and then wake barber up and release chair
         else:
-            print "Client " + str(clientID) + " got a chair!"
             startTime = time.time()
             barbersSem.acquire()
             endTime = time.time()
             totalClientWaitTime += (endTime - startTime)
-            print "Client " + str(clientID) + " got a barber! (after waiting)"
             condition.acquire()
             condition.notify()
             condition.release()
             chairsSem.release()
     #a barber is available, wake barber up
     else:
-        print "Client " + str(clientID) + " got a barber!"
         condition.acquire()
         condition.notify()
         condition.release()
@@ -134,7 +126,7 @@ for c in clients:
     c.join()
 
 #sleep in case barber is mid-cut
-time.sleep(1)
+time.sleep(input.haircut_t)
 
 #notify barbers that the day is over!
 condition.acquire()
