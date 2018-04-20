@@ -1,9 +1,4 @@
 #!/usr/bin/env python
-
-#one cond var (to notify barber)
-#one mutex
-#two sems -> chairs and barbers
-#hint: try_wait()
 import sys
 import threading
 import time
@@ -29,9 +24,16 @@ def input_arg_handler():
         input = Input(int(sys.argv[1]), int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4]), int(sys.argv[5]))
         return input
 
+def output_stats(input, totalBarberWaitTime, totalClientWaitTime, totalHaircuts, totalClientsWhoLeft):
+    print "\n\nTOTALS:"
+    print "Total Haircuts: " + str(totalHaircuts)
+    print "Number of Clients That Left: " + str(totalClientsWhoLeft)
+    print "Avg Client Wait Time: " + str(totalClientWaitTime / input.num_clients)
+    print "Avg Barber Wait Time: " + str(totalBarberWaitTime / input.num_barbers)
+
 #thread function for barbers
-def barber(barberID, haircut_t):
-    global clientsTally, input, barbersSem, condition
+def barber(barberID):
+    global clientsTally, input, barbersSem, condition, totalBarberWaitTime, totalHaircuts
 
     #loop until day is over
     while (clientsTally < input.num_clients):
@@ -39,8 +41,11 @@ def barber(barberID, haircut_t):
         print "Barber " + str(barberID) + " waiting"
         barbersSem.release()
         condition.acquire()
+        startTime = time.time()
         condition.wait()
+        endTime = time.time()
         condition.release()
+        totalBarberWaitTime += (endTime - endTime)
 
         #check to see if its the "end of the day" before continuing to work
         if (clientsTally >= input.num_clients):
@@ -48,14 +53,16 @@ def barber(barberID, haircut_t):
 
         #cut hair
         print "Barber " + str(barberID) + " cutting"
-        time.sleep( random.randint(0, haircut_t) )
+        time.sleep( random.randint(0, input.haircut_t) )
+
         #barber done, let the system know is available
-        clientsTally += 1
         print "Barber " + str(barberID) + " done"
+        clientsTally += 1
+        totalHaircuts += 1
 
 #thread functions for clients
 def client(clientID):
-    global clientsTally, barbersSem, chairsSem, condition
+    global clientsTally, barbersSem, chairsSem, condition, totalClientWaitTime, totalClientsWhoLeft
 
     print "Client " + str(clientID) + " entering"
     barberAvailable = barbersSem.acquire(False)
@@ -66,11 +73,15 @@ def client(clientID):
         if not chairAvailable:
             clientsTally += 1
             print "Client " + str(clientID) + " leaving"
+            totalClientsWhoLeft += 1
             return
         #a is available, wait until a barber is done and then wake barber up and release chair
         else:
             print "Client " + str(clientID) + " got a chair!"
+            startTime = time.time()
             barbersSem.acquire()
+            endTime = time.time()
+            totalClientWaitTime += (endTime - startTime)
             print "Client " + str(clientID) + " got a barber! (after waiting)"
             condition.acquire()
             condition.notify()
@@ -93,8 +104,12 @@ condition = threading.Condition()
 barbersSem = threading.Semaphore(0)
 chairsSem = threading.Semaphore(input.num_chairs)
 
-#tally for finding when "end of day" is
+#counters
 clientsTally = 0
+totalBarberWaitTime = 0
+totalClientWaitTime = 0
+totalHaircuts = 0
+totalClientsWhoLeft = 0
 
 #threads storage
 barbers = []
@@ -102,7 +117,7 @@ clients = []
 
 #start barbers
 for i in range(input.num_barbers):
-    b = threading.Thread(target = barber, args = (i,input.haircut_t))
+    b = threading.Thread(target = barber, args = (i,))
     barbers.append(b)
     b.start()
 
@@ -124,3 +139,7 @@ time.sleep(input.haircut_t)
 condition.acquire()
 condition.notifyAll()
 condition.release()
+
+time.sleep(1)
+
+output_stats(input, totalBarberWaitTime, totalClientWaitTime, totalHaircuts, totalClientsWhoLeft)
