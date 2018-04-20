@@ -9,8 +9,8 @@ class Input:
         self.num_barbers = num_barbers
         self.num_clients = num_clients
         self.num_chairs  = num_chairs
-        self.arrival_t   = arrival_t
-        self.haircut_t   = haircut_t
+        self.arrival_t   = (arrival_t / 1000000)
+        self.haircut_t   = (haircut_t / 1000000)
 
 #if input is valid, store in an Input object
 def input_arg_handler():
@@ -24,12 +24,13 @@ def input_arg_handler():
         input = Input(int(sys.argv[1]), int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4]), int(sys.argv[5]))
         return input
 
+#outputs statistics
 def output_stats(input, totalBarberWaitTime, totalClientWaitTime, totalHaircuts, totalClientsWhoLeft):
     print "\n\nTOTALS:"
     print "Total Haircuts: " + str(totalHaircuts)
-    print "Number of Clients That Left: " + str(totalClientsWhoLeft)
-    print "Avg Client Wait Time: " + str(totalClientWaitTime / input.num_clients)
-    print "Avg Barber Wait Time: " + str(totalBarberWaitTime / input.num_barbers)
+    print "Clients That Left: " + str(totalClientsWhoLeft)
+    print "Avg Client Wait Time: " + str((totalClientWaitTime / input.num_clients) * 1000000)
+    print "Avg Barber Wait Time: " + str((totalBarberWaitTime / input.num_barbers) * 1000000)
 
 #thread function for barbers
 def barber(barberID):
@@ -45,7 +46,7 @@ def barber(barberID):
         condition.wait()
         endTime = time.time()
         condition.release()
-        totalBarberWaitTime += (endTime - endTime)
+        totalBarberWaitTime += (endTime - startTime)
 
         #check to see if its the "end of the day" before continuing to work
         if (clientsTally >= input.num_clients):
@@ -133,7 +134,7 @@ for c in clients:
     c.join()
 
 #sleep in case barber is mid-cut
-time.sleep(input.haircut_t)
+time.sleep(1)
 
 #notify barbers that the day is over!
 condition.acquire()
