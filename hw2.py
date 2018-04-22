@@ -21,7 +21,7 @@ def input_arg_handler():
         print "Error: all input arguments must be greater than 0"
         exit(1)
     else:
-        input = Input(int(sys.argv[1]), int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4]), int(sys.argv[5]))
+        input = Input(int(sys.argv[1]), int(sys.argv[2]), int(sys.argv[3]), float(sys.argv[4]), float(sys.argv[5]))
         return input
 
 #outputs statistics
@@ -30,41 +30,37 @@ def output_stats(input, totalBarberWaitTime, totalClientWaitTime, totalHaircuts,
     print "Total Haircuts: " + str(totalHaircuts)
     print "Clients That Left: " + str(totalClientsWhoLeft)
     print "Avg Client Wait Time: " + str((totalClientWaitTime / input.num_clients) * 1000000)
-    print "Avg Barber Wait Time: " + str((totalBarberWaitTime / input.num_clients) * 1000000)
+    print "Avg Barber Sleep Time: " + str((totalBarberWaitTime / input.num_barbers) * 1000000)
 
 #thread function for barbers
 def barber(barberID):
-    global clientsTally, input, barbersSem, condition, mutex, totalBarberWaitTime, totalHaircuts, barberNotReady, global_flag
+    global input, barbersSem, condition, mutex, totalBarberWaitTime, done_flag
 
     #loop until day is over
     while (True):
         condition.acquire()
-        #wait until a client wakes barber up
-
         barbersSem.release()
-
-        barberNotReady = False
         startTime = time.time()
+        #wait until a client wakes barber up
         condition.wait()
         endTime = time.time()
-        barberNotReady = True
-        totalBarberWaitTime += (endTime - startTime)
 
         #check to see if its the "end of the day" before continuing to work
-        if (global_flag):
+        if (done_flag):
             condition.release()
             exit(0)
 
+        mutex.acquire()
+        totalBarberWaitTime += (endTime - startTime)       #pushed until after global check for more acurate time (excludes final wait)
+        mutex.release()
         #cut hair
-        time.sleep( random.randint(0, input.haircut_t) )
-        #barber done, let the system know is available
-        clientsTally += 1
-        totalHaircuts += 1
+        time.sleep( random.uniform(0, input.haircut_t) )
+        #barber done
         condition.release()
 
 #thread functions for clients
 def client(clientID):
-    global clientsTally, barbersSem, chairsSem, condition, mutex, totalClientWaitTime, totalClientsWhoLeft, barberNotReady
+    global barbersSem, chairsSem, condition, mutex, totalClientWaitTime, totalClientsWhoLeft, totalHaircuts
 
     barberAvailable = barbersSem.acquire(False)
     #if a barber is not a available, then check if a chair is available
@@ -72,36 +68,33 @@ def client(clientID):
         chairAvailable = chairsSem.acquire(False)
         #if a chair is not available, then leave
         if not chairAvailable:
-            ###print "leave " + str(clientID)
-            ###mutex.acquire()
-            clientsTally += 1
-            ###mutex.release()
+            mutex.acquire()
             totalClientsWhoLeft += 1
+            mutex.release()
             exit(0)
         #a chair is available, wait until a barber is done and then wake barber up and release chair
         else:
-            ###print "chair " + str(clientID)
             startTime = time.time()
-            barbersSem.acquire()       ###### It gets stuck right here ######
-            ###print "got one after W " + str(clientID)
+            barbersSem.acquire()
             endTime = time.time()
+            mutex.acquire()
             totalClientWaitTime += (endTime - startTime)
-            while(barberNotReady):
-                pass
-            ###print "notify"
+            mutex.release()
             condition.acquire()
             condition.notify()
             condition.release()
             chairsSem.release()
+            mutex.acquire()
+            totalHaircuts += 1
+            mutex.release()
     #a barber is available, wake barber up
     else:
-        ###print "got one " + str(clientID)
-        while(barberNotReady):
-            pass
-        ###print "notify"
         condition.acquire()
         condition.notify()
         condition.release()
+        mutex.acquire()
+        totalHaircuts += 1
+        mutex.release()
 
 
 ############MAIN##############
@@ -112,11 +105,9 @@ mutex = threading.Lock()
 condition = threading.Condition()
 barbersSem = threading.Semaphore(0)
 chairsSem = threading.Semaphore(input.num_chairs)
-barberNotReady = True
-global_flag = False
+done_flag = False
 
 #counters
-clientsTally = 0
 totalBarberWaitTime = 0
 totalClientWaitTime = 0
 totalHaircuts = 0
@@ -134,7 +125,7 @@ for i in range(input.num_barbers):
 
 #start clients at random intervals
 for i in range(input.num_clients):
-    time.sleep( random.randint(0, input.arrival_t) )
+    time.sleep( random.uniform(0, input.arrival_t) )
     c = threading.Thread(target = client, args = (i,))
     clients.append(c)
     c.start()
@@ -142,19 +133,14 @@ for i in range(input.num_clients):
 #wait for clients to be done
 for c in clients:
     c.join()
-global_flag = True
+done_flag = True
 
 #sleep in case barber is mid-cut
-time.sleep(input.haircut_t)
+time.sleep(input.haircut_t * 2)
 
 #notify barbers that the day is over!
 condition.acquire()
 condition.notifyAll()
 condition.release()
-
-#for b in barbers:
-    #b.join()
-
-time.sleep(1)
 
 output_stats(input, totalBarberWaitTime, totalClientWaitTime, totalHaircuts, totalClientsWhoLeft)
