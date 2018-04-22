@@ -30,37 +30,41 @@ def output_stats(input, totalBarberWaitTime, totalClientWaitTime, totalHaircuts,
     print "Total Haircuts: " + str(totalHaircuts)
     print "Clients That Left: " + str(totalClientsWhoLeft)
     print "Avg Client Wait Time: " + str((totalClientWaitTime / input.num_clients) * 1000000)
-    print "Avg Barber Wait Time: " + str((totalBarberWaitTime / input.num_barbers) * 1000000)
+    print "Avg Barber Wait Time: " + str((totalBarberWaitTime / input.num_clients) * 1000000)
 
 #thread function for barbers
 def barber(barberID):
-    global clientsTally, input, barbersSem, condition, totalBarberWaitTime, totalHaircuts
+    global clientsTally, input, barbersSem, condition, mutex, totalBarberWaitTime, totalHaircuts, barberNotReady, global_flag
 
     #loop until day is over
-    while (clientsTally < input.num_clients):
-        #wait until a client wakes barber up
-        barbersSem.release()
+    while (True):
         condition.acquire()
+        #wait until a client wakes barber up
+
+        barbersSem.release()
+
+        barberNotReady = False
         startTime = time.time()
         condition.wait()
         endTime = time.time()
-        condition.release()
+        barberNotReady = True
         totalBarberWaitTime += (endTime - startTime)
 
         #check to see if its the "end of the day" before continuing to work
-        if (clientsTally >= input.num_clients):
-            return
+        if (global_flag):
+            condition.release()
+            exit(0)
 
         #cut hair
         time.sleep( random.randint(0, input.haircut_t) )
-
         #barber done, let the system know is available
         clientsTally += 1
         totalHaircuts += 1
+        condition.release()
 
 #thread functions for clients
 def client(clientID):
-    global clientsTally, barbersSem, chairsSem, condition, totalClientWaitTime, totalClientsWhoLeft
+    global clientsTally, barbersSem, chairsSem, condition, mutex, totalClientWaitTime, totalClientsWhoLeft, barberNotReady
 
     barberAvailable = barbersSem.acquire(False)
     #if a barber is not a available, then check if a chair is available
@@ -68,21 +72,33 @@ def client(clientID):
         chairAvailable = chairsSem.acquire(False)
         #if a chair is not available, then leave
         if not chairAvailable:
+            ###print "leave " + str(clientID)
+            ###mutex.acquire()
             clientsTally += 1
+            ###mutex.release()
             totalClientsWhoLeft += 1
-            return
-        #a is available, wait until a barber is done and then wake barber up and release chair
+            exit(0)
+        #a chair is available, wait until a barber is done and then wake barber up and release chair
         else:
+            ###print "chair " + str(clientID)
             startTime = time.time()
-            barbersSem.acquire()
+            barbersSem.acquire()       ###### It gets stuck right here ######
+            ###print "got one after W " + str(clientID)
             endTime = time.time()
             totalClientWaitTime += (endTime - startTime)
+            while(barberNotReady):
+                pass
+            ###print "notify"
             condition.acquire()
             condition.notify()
             condition.release()
             chairsSem.release()
     #a barber is available, wake barber up
     else:
+        ###print "got one " + str(clientID)
+        while(barberNotReady):
+            pass
+        ###print "notify"
         condition.acquire()
         condition.notify()
         condition.release()
@@ -92,10 +108,12 @@ def client(clientID):
 input = input_arg_handler();
 
 #synchronization tools
-mut = threading.Lock()
+mutex = threading.Lock()
 condition = threading.Condition()
 barbersSem = threading.Semaphore(0)
 chairsSem = threading.Semaphore(input.num_chairs)
+barberNotReady = True
+global_flag = False
 
 #counters
 clientsTally = 0
@@ -124,6 +142,7 @@ for i in range(input.num_clients):
 #wait for clients to be done
 for c in clients:
     c.join()
+global_flag = True
 
 #sleep in case barber is mid-cut
 time.sleep(input.haircut_t)
@@ -132,6 +151,9 @@ time.sleep(input.haircut_t)
 condition.acquire()
 condition.notifyAll()
 condition.release()
+
+#for b in barbers:
+    #b.join()
 
 time.sleep(1)
 
